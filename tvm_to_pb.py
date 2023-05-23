@@ -2,24 +2,32 @@
 import json
 import sys
 import os
-from pprint import pprint
+
+
 class InputInfo:
     def __init__(self, input_node_idx, input_node_output_idx=0):
         super().__init__()
         self.input_node_idx = input_node_idx
         self.input_node_output_idx = input_node_output_idx
+
     def __str__(self):
         return "InputIdx=" + str(self.input_idx)
+
     def __repr__(self):
         return self.__str__()
+
+
 class NodeEntry:
     def __init__(self, node_id, index, version):
         super().__init__()
         self.node_id = node_id
         self.index = index
         self.version = version
+
+
 class TVMOpParam:
-    def __init__(self, func_name, num_inputs, num_outputs, flattern_data, attrs):
+    def __init__(self, func_name, num_inputs, num_outputs, 
+                 flattern_data, attrs):
         super().__init__()
         self.func_name = func_name
         self.num_inputs = num_inputs
@@ -32,6 +40,8 @@ class TVMOpParam:
     
     def __repr__(self):
         return self.__str__()
+
+
 class TvmOp:
     def __init__(self, idx, op_type, name, inputs, attrs):
         super().__init__()
@@ -54,20 +64,24 @@ class TvmOp:
     
     def __repr__(self):
         return self.__str__()
+    
 def entry_id(node_id, index, node_row_ptr_):
     return node_row_ptr_[node_id] + index
+
 def parse_graph_json(json_file):
     with open(json_file, 'r') as f:
       json_str = f.read()
       tvm_graph = json.loads(json_str)
-    # 鍏ㄩ儴鐨凾VM鑺傜偣鏁�
+
+    # 全部的TVM节点数
     all_tvm_nodes = tvm_graph["nodes"]
     input_nodes = tvm_graph["arg_nodes"]
     output_nodes = tvm_graph["heads"] 
     attrs = tvm_graph["attrs"]
     node_row_ptr = tvm_graph["node_row_ptr"]
     attr_shape_lst,  dltype_lst, storage_id_lst = attrs['shape'][-1], attrs['dltype'][-1], attrs['storage_id'][-1]
-    # 杩欓噷瀹為檯鏄疶ensor鐨勪俊鎭€傛湁浜汿ensor娌℃湁鐢ㄥ埌锛屾瘮濡傛煇涓狾P鏈夊涓緭鍑猴紝鍙敤鍒颁簡1涓�
+
+    # 这里实际是Tensor的信息。有些Tensor没有用到，比如某个OP有多个输出，只用到了1个
     # data entry is all the data the functions needs to access
     data_entry_shapes = []
     num_node_entries = node_row_ptr[-1]
@@ -77,7 +91,7 @@ def parse_graph_json(json_file):
     # node --> (shape, type, storage_id)
     node_2_attrs = {}
     for i in range(len(attr_shape_lst)):
-        # 浠ｈ〃鏌愪竴涓猠ntry鐨剆hape锛宔ntry浣滀负function鐨刟rgv鍜宺etv
+        # 代表某一个entry的shape，entry作为function的argv和retv
       node_2_attrs[i] = (attr_shape_lst[i], dltype_lst[i], storage_id_lst[i])        
     
     index_2_tvm_op = {}
@@ -103,12 +117,14 @@ def parse_graph_json(json_file):
     for output in output_nodes:
         output_node_idx.append(output[0])
     return node_idx_map, node_row_ptr, attr_shape_lst, output_node_idx
+
 def simplify_name(name):
     return name
     if name.startswith("fused"):
         ops = name.split("_")
         return "_".join(ops[2:])
     return name
+
 def json_to_graphviz(node_idx_map, node_row_ptr, attr_shape_lst, output_nodes):
     import graphviz
     dot = graphviz.Digraph(comment='TVM Graph')
@@ -149,12 +165,14 @@ def json_to_graphviz(node_idx_map, node_row_ptr, attr_shape_lst, output_nodes):
                 dot.edge(simplify_name(input_node.name), simplify_name(tvm_node.name), label=str(shape_info))
     return dot
     dot.render('tvm_graph.gv').replace('\\', '/')
+
 if __name__ == "__main__":
-    if len(sys.argv) is not 2:
+    if len(sys.argv) is not 3:
         print("Usage: python tvm_graph_to_pb.py ${TVM GraphRuntime Json File}  ${GraphDef Output Dir}")
         print("Example: python tvm_graph_to_pb.py /workdir/tf_tvm_files/0_0.json .")
     else:
         tvm_graph_json = sys.argv[1]
+        output_dir = sys.argv[2]
         node_idx_map, node_row_ptr, attr_shape_lst, output_node_idx = parse_graph_json(tvm_graph_json)
         dot_graph = json_to_graphviz(node_idx_map, node_row_ptr,  attr_shape_lst, output_node_idx)
-        dot_graph.render(os.path.join('.', tvm_graph_json + '.gv')).replace('\\', '/')
+        dot_graph.render(os.path.join(output_dir, 'tvm_graph.gv')).replace('\\', '/')
