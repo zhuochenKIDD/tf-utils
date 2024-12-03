@@ -84,6 +84,12 @@ def input_nodes(node_map, graph_def, node_name):
     return added_node
 
 
+def clean_const_node(gdef):
+  for n in gdef.node:
+    if n.op == "Const":
+      tensor_value = n.attr['value'].tensor
+      tensor_value.ClearField("tensor_content")
+
 if __name__ == "__main__":
   if len(sys.argv) < 2:
     raise
